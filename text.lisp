@@ -19,104 +19,101 @@
     :accessor list-bullet))
   (:documentation "A simple, plain-text resume formatter."))
 
-(def-formatter-section text-resume-formatter :basics
-  (formatter section-data stream)
-  (format stream "~a~%" (property :name section-data t))
+(defmethod format-section ((formatter text-resume-formatter)
+                           (section (eql :basics)) section-data stream)
+  (format stream "~a~%" (property-value :name section-data))
   (format-properties formatter
                      '((:address "Address")
                        (:phone "Phone")
                        (:email "Email"))
                      section-data stream)
-  (alexandria:when-let ((summary (property :summary section-data)))
+  (alexandria:when-let ((summary (property-value :summary section-data)))
     (terpri stream)
     (format-header formatter "Summary" 0 stream)
-    (format-text formatter summary stream)
-    (terpri stream))
-  (format stream "~2%"))
-
-(def-formatter-section text-resume-formatter :education
-  (formatter section-data stream)
-  (format-header formatter "Education" 0 stream)
-  (dolist (education section-data)
-    (let* ((school (property :school education t))
-           (graduated (property :graduated education t))
-           (graduated-string (with-output-to-string (stream)
-                               (format-date formatter graduated stream)))
-           (header (format nil "~a (~a)" school graduated-string)))
-      (format-header formatter header 1 stream))    
-    (format-properties formatter
-                       '((:degree "Degree")
-                         (:gpa "Overall GPA")
-                         (:awards "Awards and designations"))
-                       education stream)
+    (format-value formatter summary stream)
     (terpri stream))
   (terpri stream))
 
-(def-formatter-section text-resume-formatter :experience
-  (formatter section-data stream)
-  (format-header formatter "Experience" 0 stream)
-  (dolist (experience section-data)
-    (let* ((title (property :title experience t))
-           (dates (property :dates experience t))
-           (date-string (with-output-to-string (stream)
-                          (format-date-range formatter dates stream)))
-           (header (format nil "~a (~a)" title date-string)))
-      (format-header formatter header 1 stream))
-    (format-properties formatter
-                       '((:organization "Organization")
-                         (:location "Location"))
-                       experience stream)
-    (alexandria:when-let ((experiences (property :experiences experience)))
-      (format-list formatter experiences stream))
-    (terpri stream))
+(def-section-item text-resume-formatter :education
+    (formatter education stream)
+  (let* ((school (property-value :school education))
+         (graduated (property-value :graduated education))
+         (graduated-string (with-output-to-string (stream)
+                             (format-value formatter graduated stream)))
+         (header (format nil "~a (~a)" school graduated-string)))
+    (format-header formatter header 1 stream))
+  (format-properties formatter
+                     '((:degree "Degree")
+                       (:gpa "Overall GPA")
+                       (:awards "Awards and designations"))
+                     education stream)
   (terpri stream))
 
-(def-formatter-section text-resume-formatter :skills
-  (formatter section-data stream)
-  (format-header formatter "Skills" 0 stream)
-  (dolist (skill section-data)
-    (format-header formatter (property :skill skill t) 1 stream)
-    (alexandria:when-let ((details (property :details skill)))
-      (format-list formatter details stream))
-    (terpri stream))
+(def-section-item text-resume-formatter :experience
+    (formatter experience stream)
+  (let* ((title (property-value :title experience))
+         (dates (property-value :dates experience))
+         (date-string (with-output-to-string (stream)
+                        (format-value formatter dates stream)))
+         (header (format nil "~a (~a)" title date-string)))
+    (format-header formatter header 1 stream))
+  (format-properties formatter
+                     '((:organization "Organization")
+                       (:location "Location"))
+                     experience stream)
+  (alexandria:when-let ((experiences (property-value :experiences experience)))
+    (format-value formatter experiences stream))
+  (terpri stream))
+
+(def-section-item text-resume-formatter :skills
+    (formatter skill stream)
+  (format-header formatter (property-value :skill skill) 1 stream)
+  (alexandria:when-let ((details (property-value :details skill)))
+    (format-value formatter details stream))
   (terpri stream))
 
 (defmethod format-header ((formatter text-resume-formatter) header level stream)
-  (format stream "~a~%" header)
+  (format stream "~a~%" (escape formatter header))
   (let ((underline (or (nth level (header-underlines formatter))
                        (last (header-underlines formatter)))))
     (write-string (repeat-string underline (length header)) stream))
   (terpri stream))
 
-(defmethod format-list ((formatter text-resume-formatter) list stream)
-  (dolist (element list)
-    (format stream "~a " (list-bullet formatter))
-    (wrap-text element stream :subsequent-indent "  ")
-    (terpri stream)))
-
 (defmethod format-property ((formatter text-resume-formatter) property
                             (value list) stream)
-  (format stream "~a:~%" property)
-  (format-list formatter value stream))
+  (format stream "~a:~%" (escape formatter property))
+  (format-value formatter value stream))
 
 (defmethod format-property ((formatter text-resume-formatter) property
-                            (value string) stream)
-  (format stream "~a: " property)
-  (wrap-text value stream
-             :subsequent-indent (repeat-string " " (+ (length property) 2)))
+                            value stream)
+  (format stream "~a: " (escape formatter property))
+  (let* ((indent (+ (length property) 2))
+         (*wrap-subsequent-indent*
+          ;; The concatenation here handles multiple levels of
+          ;; indentation
+          (concatenate 'string
+                       *wrap-subsequent-indent*
+                       (repeat-string " " indent))))
+    (format-value formatter value stream))
   (terpri stream))
 
-(defmethod format-text ((formatter text-resume-formatter) text stream)
-  (wrap-text text stream))
+(defmethod format-value ((formatter text-resume-formatter) (list list) stream)
+  (dolist (element list)
+    (let ((bullet (list-bullet formatter)))
+      (format stream "~a " bullet)
+      (let* ((indent (1+ (length bullet)))
+             (*wrap-subsequent-indent*
+              (concatenate 'string
+                           *wrap-subsequent-indent*
+                           (repeat-string " " indent)))
+             (*wrap-initial-offset* (+ *wrap-initial-offset* indent)))
+        (format-value formatter element stream)))
+    (terpri stream)))
 
-(defmethod format-date-range ((formatter text-resume-formatter) range stream)
-  (if (and (consp range) (consp (car range)))
-      (progn
-        (format-date formatter (car range) stream)
-        (write-string " - " stream)
-        (format-date formatter (cdr range) stream))
-      (progn
-        (format-date formatter range stream)
-        (write-string " - Present" stream))))
+(defmethod format-value ((formatter text-resume-formatter) (range date-range)
+                         stream)
+  (format-value formatter (start range) stream)
+  (write-string " - " stream)
+  (format-value formatter (or (end range) "Present") stream))
 
 ;;;; text.lisp ends here
