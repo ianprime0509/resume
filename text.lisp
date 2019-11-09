@@ -21,27 +21,27 @@
 
 (defmethod format-section ((formatter text-resume-formatter)
                            (section (eql :basics)) section-data stream)
-  (format stream "~a~%" (property-value :name section-data))
-  (format-properties formatter
-                     '((:address "Address")
-                       (:phone "Phone")
-                       (:email "Email"))
-                     section-data stream)
-  (alexandria:when-let ((summary (property-value :summary section-data)))
-    (terpri stream)
-    (format-header formatter "Summary" 0 stream)
-    (format-value formatter summary stream)
-    (terpri stream))
+  (with-property-values (name summary) section-data
+    (format stream "~a~%" (escape formatter name))
+    (format-properties formatter
+                       '((:address "Address")
+                         (:phone "Phone")
+                         (:email "Email"))
+                       section-data stream)
+    (when summary
+      (terpri stream)
+      (format-header formatter "Summary" 0 stream)
+      (format-value formatter summary stream)
+      (terpri stream)))
   (terpri stream))
 
 (def-section-item text-resume-formatter :education
     (formatter education stream)
-  (let* ((school (property-value :school education))
-         (graduated (property-value :graduated education))
-         (graduated-string (with-output-to-string (stream)
-                             (format-value formatter graduated stream)))
-         (header (format nil "~a (~a)" school graduated-string)))
-    (format-header formatter header 1 stream))
+  (with-property-values (school graduated) education
+    (let* ((graduated-string (with-output-to-string (stream)
+                               (format-value formatter graduated stream)))
+           (header (format nil "~a (~a)" school graduated-string)))
+      (format-header formatter header 1 stream)))
   (format-properties formatter
                      '((:degree "Degree")
                        (:gpa "Overall GPA")
@@ -51,25 +51,23 @@
 
 (def-section-item text-resume-formatter :experience
     (formatter experience stream)
-  (let* ((title (property-value :title experience))
-         (dates (property-value :dates experience))
-         (date-string (with-output-to-string (stream)
-                        (format-value formatter dates stream)))
-         (header (format nil "~a (~a)" title date-string)))
-    (format-header formatter header 1 stream))
-  (format-properties formatter
-                     '((:organization "Organization")
-                       (:location "Location"))
-                     experience stream)
-  (alexandria:when-let ((experiences (property-value :experiences experience)))
-    (format-value formatter experiences stream))
+  (with-property-values (title dates experiences) experience
+      (let* ((date-string (with-output-to-string (stream)
+                            (format-value formatter dates stream)))
+             (header (format nil "~a (~a)" title date-string)))
+        (format-header formatter header 1 stream))
+    (format-properties formatter
+                       '((:organization "Organization")
+                         (:location "Location"))
+                       experience stream)
+    (when experiences (format-value formatter experiences stream)))
   (terpri stream))
 
 (def-section-item text-resume-formatter :skills
     (formatter skill stream)
-  (format-header formatter (property-value :skill skill) 1 stream)
-  (alexandria:when-let ((details (property-value :details skill)))
-    (format-value formatter details stream))
+  (with-property-values (skill details) skill
+    (format-header formatter skill 1 stream)
+    (when details (format-value formatter details stream)))
   (terpri stream))
 
 (defmethod format-header ((formatter text-resume-formatter) header level stream)

@@ -110,8 +110,8 @@ section.")
 (defmethod convert-value ((type (eql 'date-range)) range)
   "Convert RANGE, which is a pair of dates (START . END), to a DATE-RANGE."
   (make-instance 'date-range
-                 :start (make-date (car range))
-                 :end (when (cdr range) (make-date (cdr range)))))
+                 :start (convert-value 'date (car range))
+                 :end (when (cdr range) (convert-value 'date (cdr range)))))
 
 (defclass phone ()
   ((phone-number
@@ -297,6 +297,26 @@ displayed in the formatted output)."
   "Return the result of repeating STRING TIMES times."
   (with-output-to-string (output)
     (loop repeat times do (write-string string output))))
+
+(defmacro with-property-values (properties section-data &body body)
+  "Establishes bindings for each property in PROPERTIES in SECTION-DATA usable within BODY.
+Each property in PROPERTIES is either a list (VARIABLE PROPERTY-NAME)
+or just VARIABLE if the two are the same (in this case, PROPERTY-NAME
+is just the keyword with the same name as VARIABLE)."
+  (let ((data (gensym)))
+    (flet ((make-binding (variable property)
+             `(,variable (property-value ,property ,data))))
+      (let ((bindings
+             (loop for property in properties collect
+                  (ctypecase property
+                    (list
+                     (destructuring-bind (variable property) property
+                       (make-binding variable property)))
+                    (symbol
+                     (make-binding property
+                                   (intern (string property) 'keyword)))))))
+        `(let ((,data ,section-data))
+           (symbol-macrolet ,bindings ,@body))))))
 
 (defun wrap-text (text stream &key (subsequent-indent "") (width 80) (initial-offset 0))
   "Write TEXT to STREAM, wrapping lines at word breaks so that the length of each line does not exceed WIDTH.

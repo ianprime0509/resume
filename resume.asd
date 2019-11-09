@@ -8,6 +8,7 @@
   :depends-on ("alexandria" "cl-utilities")
   :components ((:file "packages")
                (:file "resume" :depends-on ("packages"))
+               (:file "latex" :depends-on ("resume"))
                (:file "text" :depends-on ("resume"))))
 
 ;;;; resume.asd ends here
